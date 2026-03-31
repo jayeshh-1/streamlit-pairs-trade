@@ -6,7 +6,7 @@ import plotly.express as px
 
 import json
 
-with open("data/pipeline_state.json") as f:
+with open("pipeline_state.json") as f:
     state = json.load(f)
 
 # ==========================================
