@@ -248,7 +248,6 @@ st.markdown("<h2 id='0-problem-setup'><span class='section-badge'>Phase 0</span>
 
 st.markdown("""
 Traditional distance-based pairs trading strategies have shown declining robustness, particularly after accounting for transaction costs and unstable spread dynamics.
-
 This work develops a pipeline to improve pair selection, dependence modeling, and execution by combining unsupervised learning, copula-based methods, and stochastic control.
 
 ### Limitation of Distance-Based Methods
