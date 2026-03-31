@@ -532,7 +532,7 @@ with col_cop_text:
     st.markdown("These thresholds are fixed instead of optimized to avoid overfitting and keep the results stable out-of-sample.")
 
 with col_cop_plot:
-    st.image("plots/copula_scatter.png", caption="Copula Dependence Structure", use_container_width=True)
+    st.image("copula_scatter.png", caption="Copula Dependence Structure", use_container_width=True)
     st.markdown("<p style='font-size:0.85rem; opacity:0.7; text-align:center;'><em>Axes represent historical return percentiles (0.0 to 1.0). This isolates structural dependence by removing individual asset volatility.</em></p>", unsafe_allow_html=True)
 
 st.markdown("""
@@ -545,7 +545,7 @@ Fitting copulas directly to raw asset prices fails. Because equity prices genera
 # Center the wide rectangular plot so it doesn't overwhelm the screen
 col_pad1, col_sig, col_pad2 = st.columns([1, 4, 1])
 with col_sig:
-    st.image("plots/copula_signals.png", caption="Trading Signals from Copula CMPI", use_container_width=True)
+    st.image("copula_signals.png", caption="Trading Signals from Copula CMPI", use_container_width=True)
 
 copula_df = pd.DataFrame(state["copula_universe"])
 copula_df = copula_df.rename(columns={
@@ -617,11 +617,11 @@ st.markdown("### Structural OU Parameters & Horizon Risk")
 col_ou1, col_ou2 = st.columns(2)
 
 with col_ou1:
-    st.image("plots/half_life_distribution.png", caption="Distribution of Spread Half-Lives", use_container_width=True)
+    st.image("half_life_distribution.png", caption="Distribution of Spread Half-Lives", use_container_width=True)
 
 with col_ou2:
     # Display authentic OU spread plot generated from the research notebook
-    st.image("plots/ou_spread.png", caption="OU Process Fit & Mean Reversion", use_container_width=True)
+    st.image("ou_spread.png", caption="OU Process Fit & Mean Reversion", use_container_width=True)
 
 with st.expander("View Stochastic Execution Bounds (Phase 3 Output)"):
     ou_df = pd.DataFrame(state["final_execution_universe"])
@@ -668,10 +668,10 @@ Before passing the universe to the heavy HMM compute engine, the pipeline applie
 col_hmm1, col_hmm2 = st.columns(2)
 
 with col_hmm1:
-    st.image("plots/regime_classification.png", caption="Out-of-Sample Regime Decoding", use_container_width=True)
+    st.image("regime_classification.png", caption="Out-of-Sample Regime Decoding", use_container_width=True)
 
 with col_hmm2:
-    st.image("plots/bock_mestel_trading_bands.png", caption="Bock & Mestel Trading Bands", use_container_width=True)
+    st.image("bock_mestel_trading_bands.png", caption="Bock & Mestel Trading Bands", use_container_width=True)
 
 
 st.markdown("""
