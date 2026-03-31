@@ -411,7 +411,7 @@ with col_pca_text:
 
 with col_pca_plot:
     # 3D PCA Visual
-    pca_df = pd.read_csv("data/pca_embeddings.csv")
+    pca_df = pd.read_csv("pca_embeddings.csv")
     fig_pca = px.scatter_3d(
         pca_df,
         x='PC1',
