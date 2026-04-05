@@ -147,7 +147,7 @@ with st.sidebar:
 st.markdown('<div class="mobile-menu-badge">👈 Topics Menu</div>', unsafe_allow_html=True)
 
 st.markdown("<h1>Advanced Statistical Arbitrage: Copulas & Stochastic Control</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>A multi-stage statistical arbitrage pipeline combining clustering, copulas, and stochastic control for robust pair selection and execution.</p>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>A multi-stage statistical arbitrage pipeline combining clustering, copulas, and stochastic control for pair selection and execution.</p>", unsafe_allow_html=True)
 
 # Small, muted author line under the subtitle
 st.markdown("""
