@@ -595,8 +595,8 @@ st.markdown("""
 <strong>Empirical OU Fit (AEE vs CMS):</strong><br>
 • <strong>Spread Half-Life (Horizon Risk):</strong> 6.18 Trading Days<br>
 • <strong>Mean Reversion Speed (θ):</strong> 28.2635 (Exceptionally fast)<br>
-• <strong>Dimensionless Cost Barrier ($$c_{dim}$$):</strong> 0.0502 (Highly tradable)<br>
-• <strong>Optimal Entry Solution:</strong> ±0.15 $$\sigma_{OU}$$ (Incorporating 15 bps execution cost)
+• <strong>Dimensionless Cost Barrier ($c_{dim}$):</strong> 0.0502 (Highly tradable)<br>
+• <strong>Optimal Entry Solution:</strong> ±0.15 $\sigma_{OU}$ (Incorporating 15 bps execution cost)
 <br><br>
 <strong>Interpretation:</strong> With transaction costs at only 5% of the natural spread fluctuation, the HJB optimizer mathematically proves that entering on very small deviations (0.15 $\sigma_{OU}$) is optimal given the extreme mean-reversion speed. Yield scores generated from this output are used strictly for relative portfolio ranking, not as absolute return forecasts.
 </div>
@@ -640,7 +640,7 @@ st.divider()
 st.markdown("<h2 id='4-regime-risk'><span class='section-badge'>Phase 4</span><span class='h2-text'> Regime Risk Management (HMM)</span></h2>", unsafe_allow_html=True)
 
 
-st.markdown("""
+st.markdown(r"""
 Mean-reverting relationships are rarely stable forever. Structural market shifts can permanently alter the equilibrium between two assets. The parameters estimated in Phase 3 assume stationarity, but financial markets undergo qualitative regime changes. A static model estimated across a long historical window averages these distinct states, systematically underestimating risk during crises.
 
 **The Mechanism:** To prevent this, the pipeline uses an out-of-sample Hidden Markov Model (HMM) featuring Skew-T emissions and Time-Varying Transition Probabilities (TVTP). It infers the unobservable market state $q_t \in \{0, 1\}$ from the spread differences, acting as a dynamic risk overlay. The model explicitly separates a 'Safe' regime (Regime 0) from a 'Crisis' regime (Regime 1), which exhibited a massive $2.18\times$ volatility expansion in empirical testing.
@@ -703,7 +703,7 @@ Based on the empirical transition matrix, the <strong>Expected Duration of the H
 """, unsafe_allow_html=True)
 
 
-st.markdown("""
+st.markdown(r"""
 ### Asymmetric Trading Rules & The Falling Knife Killer
 
 The optimal trading strategy is asymmetric across regimes: execute normally in the safe regime, but halt entries in the crisis regime. This is justified by an asymmetric loss function—the cost of trading during a crisis (a false negative) is structurally larger than the cost of missing a trade in a calm period (a false positive).
@@ -736,7 +736,7 @@ To determine the exact mathematical breakpoint of this structural trap, the algo
 with st.expander("View Fracture Distance Sweep Data"):
     st.dataframe(load_fracture_sweep(), use_container_width=True, hide_index=True)
 
-st.markdown("""
+st.markdown(r"""
 **Conclusion:** Setting the asymmetric filter beyond $3.0 \sigma$ begins accepting extremely toxic trades with negative expected values ($-0.0196$), confirming that the strictly constrained filter correctly protects the portfolio.
 """)
 st.divider()
