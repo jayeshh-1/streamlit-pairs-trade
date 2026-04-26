@@ -323,10 +323,18 @@ st.divider()
 st.markdown("<h2 id='1-dimensionality-stationarity'><span class='section-badge'>Phase 1</span><span class='h2-text'> Dimensionality & Stationarity</span></h2>", unsafe_allow_html=True)
 
 
-st.markdown("""
-Evaluating the large equity universe yields over 100,000 possible pairwise combinations. Exhaustive testing at this scale leads to a high rate of false discoveries.
-To manage this, the pipeline utilizes unsupervised learning *prior* to any hypothesis testing. 
+st.markdown(r"""
+Evaluating a 459-stock universe yields $C(459,2) = 105,111$ candidate pairs. Applying cointegration tests to all of them without pre-filtering creates a severe multiple testing problem: at a 5% significance level, approximately 5,255 pairs would appear cointegrated purely by chance (Type 1 error in Hypothesis Testing). 
+
+To manage this, the pipeline imposes a structural prior using unsupervised learning before any hypothesis testing begins.
 """)
+
+with st.expander("Data Engineering Baseline: Log-Returns Framework"):
+    st.markdown(r"""
+    Raw price levels are integrated processes, $I(1)$, while PCA requires stationary inputs to produce meaningful factor loadings. Therefore, log-returns are used because they are approximately stationary, $I(0)$, additive across time ($log(P_T/P_0) = \Sigma log(P_t/P_{t-1})$), and they normalize across vastly different price levels[cite: 31, 32, 33]. The spread construction follows directly from this log-price framework: 
+    """)
+    st.latex(r"S_t = \log(P_t^A) - \beta \cdot \log(P_t^B)")
+    st.markdown("This represents the log-ratio of a dollar-neutral portfolio[cite: 34].")
 
 col_pca_text, col_pca_plot = st.columns([1.2, 1])
 
@@ -335,12 +343,21 @@ with col_pca_text:
     **The Mechanism:**
     **1.** First, the model uses Principal Component Analysis (PCA) to distill the daily noise down to the core drivers of variance (retaining >60% of the variance). 
     
-    **2.** It maps these latent factors into a 3D space and applies OPTICS clustering to group stocks that actually move together.
+    **2.** It maps these latent factors into a 3D space and applies OPTICS clustering to group stocks that actually move together, adapting to local densities across different market sectors.
     
-    **3.** We only test pairs that belong to the exact same cluster.
+    **3.** We restrict all hypothesis testing strictly to pairs that belong to the exact same cluster.
     
     This quickly reduces our massive 459-stock universe down to 14 principal components, grouping them into **38 distinct asset clusters** (for example, Cluster 28 cleanly isolates energy sector stocks like `COP`, `EOG`, `HAL`, and `SLB`).
     """)
+    
+    with st.expander("View Formal PCA & OPTICS Mathematics"):
+        st.markdown(r"""
+        **1. PCA Factor Extraction:**
+        We compute the sample covariance matrix $\Sigma = (1/T)R'R$ and solve the eigenvalue problem $\Sigma v_k = \lambda_k v_k$. We retain the minimum $K$ principal components such that the cumulative variance explained $\Sigma_{k=1}^{K} \lambda_k / \Sigma_j \lambda_j \geq 0.60$. The 0.60 threshold is the empirical inflection point; higher thresholds introduce idiosyncratic noise that destabilizes downstream clustering, while lower thresholds discard systematic variance.
+        
+        **2. OPTICS Density Clustering:**
+        Traditional k-means assumes spherical clusters, failing in equity factor spaces. DBSCAN requires a global epsilon radius, failing because density varies across sectors. OPTICS computes a reachability distance adapting to local density. With `min_cluster_size = 3`, we ensure cross-validation of the cluster's economic coherence.
+        """)
     
     st.markdown("""
     <div class="mechanism-box">
@@ -393,10 +410,18 @@ st.markdown("""
 
 Pairs within each cluster are then tested to see if they actually form a reliable spread.
 
-Individual stock prices are inherently unpredictable and tend to drift over time (they are non-stationary). However, if two stocks are **cointegrated**, it means we can combine them mathematically ($X_t - \\beta Y_t$) to create a spread that *is* stationary—meaning it consistently snaps back to a predictable baseline. 
+Individual stock prices are inherently unpredictable and tend to drift over time (non-stationary). However, if two stocks are **cointegrated**, it means we can combine them mathematically to create a spread that *is* stationary, meaning it consistently snaps back to a predictable baseline. 
 
 A pair is only retained if it proves this relationship mathematically: it must pass the Engle-Granger cointegration test ($p < 0.05$) and show a strong tendency to mean-revert rather than trend (Hurst Exponent $< 0.45$).
 """)
+
+with st.expander("Formal Statistical Disqualification Rules"):
+    st.markdown(r"""
+    Pairs undergo two sequential Rules of Disqualification. Failure at either stage results in immediate elimination to prevent borderline pair accumulation.
+
+    * **Rule 1: Engle-Granger Cointegration:** We estimate the hedge ratio via OLS: P_t^Y = α + β·P_t^X + ε_t, the hedge ratio is $\beta = (X'X)^{-1}X'Y$, and apply an Augmented Dickey-Fuller (ADF) test to the spread $S_t$. The null hypothesis of a unit root must be rejected at $p < 0.05$.
+    * **Rule 2: Hurst Exponent ($H$):** Using the variance-of-difference method where $Var(S_{t+\tau} - S_t) \propto \tau^{2H}$, we require $H < 0.45$. The random walk boundary is $0.5$; the $0.45$ threshold provides a strict mathematical margin of safety ensuring genuine mean-reversion.
+    """)
 
 with st.expander("View Cointegration & Mean-Reversion Filtering Survivors (Phase 1 Output)"):
     arod_df = pd.DataFrame(state["validated_pairs"])
@@ -420,7 +445,7 @@ st.markdown("<h2 id='2-extremal-dependence'><span class='section-badge'>Phase 2<
 st.markdown("""
 <div class="mechanism-box">
 <strong>The Limits of Linear Correlation:</strong><br>
-Pearson correlation only captures simple, straight-line (linear) relationships.In reality, asset returns are messy—they often exhibit asymmetric behavior, breaking down during market crashes or behaving differently during massive rallies. Copulas solve this by stripping away the individual volatility of each stock, allowing us to isolate and model the pure structural relationship between them.
+Pearson correlation only captures simple, linear relationships and assumes joint normality. In reality, equity returns exhibit excess kurtosis (fat tails) and asymmetric dependence (assets tend to crash together more strongly than they rally together). Copulas solve this by stripping away individual asset volatility, isolating the pure structural relationship.
 </div>
 """, unsafe_allow_html=True)
 
@@ -453,12 +478,26 @@ with col_cop_text:
     To reduce computational cost before expending resources on Maximum Likelihood Estimation (MLE), candidates are first screened using the **Pearson Distance Approach**. This calculates the sum of squared deviations (SSD) between normalized cumulative return indices; a lower distance mathematically validates tight historical co-movement.
     
     For the survivors, raw returns are mapped to strictly uniform marginals on the interval $[0, 1]$ via an Empirical Cumulative Distribution Function (ECDF). The model then fits these marginals to multiple Copula families (Gaussian, Clayton for lower-tail, Frank, and Gumbel). The optimal structure for each pair is selected dynamically based on the Akaike Information Criterion (AIC).
-    
-    
-    **Generating Signals (CMPI):**
-    Instead of relying on basic standard deviation bands (z-scores), the system calculates a conditional probability: *Given what Stock A is doing right now, what is the exact probability that Stock B should be at its current price?* We track this probability over time using a **Cumulative Mispricing Index (CMPI)**. We trigger a trade when this cumulative mispricing breaches a strict `0.6` threshold, exit when it reverts to `0.0`, and enforce a hard stop-loss if it blows out past `2.0`. Finally, pairs must clear an institutional dependence hurdle (e.g., Gaussian $\theta > 0.40$, Frank $\theta > 2.0$) to prove the relationship is structurally strong enough to trade.
     """)
-    st.markdown("These thresholds are fixed instead of optimized to avoid overfitting and keep the results stable out-of-sample.")
+    
+    with st.expander("View Copula MLE & CMPI Formulation"):
+        st.markdown(r"""
+        **Sklar's Theorem & Marginal Transformation:**
+        Any joint distribution can be decomposed into its continuous marginals and a unique copula $C$: $F(x,y) = C(F_X(x), F_Y(y))$. We isolate this structure by mapping returns to uniform marginals via an ECDF. 
+        
+        *Crucial Engineering Step:* These marginals are strictly clipped to $[10^{-4}, 1-10^{-4}]$. Failing to do this causes numerical overflow in MLE estimation because inverse CDF functions (like $\Phi^{-1}(0)$) diverge to $-\infty$.
+        
+        **Cumulative Mispricing Index (CMPI):**
+        We calculate the continuous conditional probability directly from the copula's distribution: 
+        """)
+        st.latex(r"MPI_{X|Y}(t) = P(U \leq u_t | V = v_t) = \frac{\partial C(u_t,v_t)}{\partial v_t}")
+        st.markdown(r"""
+        To smooth daily noise, we construct a rolling 21-day Cumulative Mispricing Index (CMPI):
+        """)
+        st.latex(r"CMPI_X(t) = \sum_{s=t-20}^{t} (MPI_{X|Y}(s) - 0.5)")
+        st.markdown(r"""
+        A long/short trade is initiated when directional disagreement occurs and $|CMPI| > 0.6$. A strict stop-loss and 'penalty box' mechanism is triggered if $|CMPI| > 2.0$.
+        """)
 
 with col_cop_plot:
     st.image("copula_scatter.png", caption="Copula Dependence Structure", use_container_width=True)
@@ -505,11 +544,20 @@ st.markdown("<h2 id='3-execution-friction'><span class='section-badge'>Phase 3</
 
 
 st.markdown("""
-Standard pairs trading uses fixed $\pm 2\sigma$ entry bands, which ignores a critical factor: **time**. 
+Holding a position ties up capital. It carries **Horizon Risk** (the uncertainty of exactly when the mispricing will correct) and **Divergence Risk** (the mathematical probability the spread widens further before converging). Standard pairs trading uses fixed $\pm 2\sigma$ entry bands. It ignores **the holding time**, fails to integrate transaction costs into the optimization objective, and is not derived from any rigorous optimality criterion. 
 
-Holding a position ties up capital. It carries **Horizon Risk** (the uncertainty of exactly when the mispricing will correct) and **Divergence Risk** (the mathematical probability the spread widens further before converging). 
+To solve this, the pipeline models the spread as a continuous Ornstein-Uhlenbeck (OU) process and applies the **Zeng & Lee (2014) Stochastic Control framework**. 
+""")
 
-**The Mechanism:** To solve this, the pipeline models the spread as a continuous Ornstein-Uhlenbeck (OU) process:
+st.markdown("""
+<div class="math-box">
+<strong>Equation 1: Continuous Ornstein-Uhlenbeck (OU) Process</strong>
+</div>
+""", unsafe_allow_html=True)
+st.latex(r"dX_t = \theta (\mu - X_t)dt + \sigma dW_t")
+
+st.markdown(r"""
+Instead of guessing entry bands, the model solves a Hamilton-Jacobi-Bellman (HJB) optimal stopping problem[cite: 2173]. It mathematically derives the exact optimal entry and exit thresholds by maximizing the expected profit *per unit of time*[cite: 2175, 2178], embedding a strict **15 basis point transaction cost** directly into the objective function[cite: 2031, 2188].
 """)
 
 
@@ -526,15 +574,42 @@ Instead of guessing entry bands, the model mathematically derives the exact opti
 More importantly, this approach allows the optimizer to internalize a strict **15 basis point transaction cost**. If the math shows that the expected profit won't cover the execution friction faster than the expected holding time, the trade is automatically rejected.
 """)
 
-st.markdown("""must
+with st.expander("View Formal OU Discretization & MLE Estimation"):
+    st.markdown(r"""
+    **AR(1) Discretization:**
+    The continuous OU SDE cannot be estimated directly from discrete daily data[cite: 2095]. We discretize it over interval $\Delta t = 1/252$ to obtain an AR(1) process[cite: 2096]:
+    """)
+    st.latex(r"X_t = \alpha + \beta X_{t-1} + \epsilon_t")
+    st.markdown(r"""
+    We run OLS regression to estimate $\alpha$ and $\beta$[cite: 2103]. Under Gaussian errors, OLS on an AR(1) process is mathematically equivalent to Maximum Likelihood Estimation (MLE)[cite: 2116]. 
+    
+    **Parameter Recovery & Stationarity:**
+    We recover the continuous parameters via $\theta = -\ln(\beta)/\Delta t$ and $\mu = \alpha/(1-\beta)$[cite: 2108, 2109]. Crucially, $\beta$ is strictly clipped to $[10^{-4}, 0.9999]$[cite: 2105]. This enforces mean-reverting stationarity and prevents severe numerical instability (division by zero) for unit root processes[cite: 2114, 2115].
+    """)
+
+with st.expander("View Zeng-Lee HJB Dimensionless Optimization"):
+    st.markdown(r"""
+    **Dimensionless Transformation:**
+    Raw OU parameters vary across pairs, making direct optimization impossible[cite: 2146]. We transform the spread into dimensionless coordinates: $x_d = (x-\mu)/\sigma_{OU}$, where $\sigma_{OU} = \sigma/\sqrt{2\theta}$ is the stationary standard deviation[cite: 2149]. The dimensionless transaction cost becomes $c_{dim} = c / \sigma_{OU}$[cite: 2152]. 
+    
+    *Hard Constraint:* If $c_{dim} \ge 1.0$, the round-trip execution cost exceeds the spread's entire natural fluctuation[cite: 2157]. The trade is mathematically impossible and immediately rejected[cite: 2155, 2159].
+    
+    **Log-Transformed HJB Objective:**
+    The original objective maximizes Yield $= (a_d - b_d - c_{dim}) / \mathbb{E}[T]$[cite: 2195]. Because the numerator (profit margin) and denominator (expected first-passage time) are often tiny fractions, the exponential surface causes severe vanishing gradients and optimizer crashes (`max_fev`)[cite: 2199, 2200]. 
+    
+    We resolve this by minimizing the log-transformed objective, converting the exponential surface to a well-conditioned linear one[cite: 2204, 2206]:
+    """)
+    st.latex(r"\min \left[ \ln(\mathbb{E}[T]) - \ln(a_d - b_d - c_{dim}) \right]")
+
+st.markdown("""
 <div class="audit-box">
 <strong>Empirical OU Fit (AEE vs CMS):</strong><br>
-• Spread Half-Life (Horizon Risk): 6.18 Trading Days<br>
-• Mean Reversion Speed (θ): 28.2635<br>
-• Spread Volatility (σ): 0.2245<br>
-• Dimensionless Entry: ±0.15 σ (incorporating 15 bps execution cost)
+• <strong>Spread Half-Life (Horizon Risk):</strong> 6.18 Trading Days<br>
+• <strong>Mean Reversion Speed (θ):</strong> 28.2635 (Exceptionally fast)<br>
+• <strong>Dimensionless Cost Barrier ($c_{dim}$):</strong> 0.0502 (Highly tradable)<br>
+• <strong>Optimal Entry Solution:</strong> ±0.15 $\sigma_{OU}$ (Incorporating 15 bps execution cost)
 <br><br>
-<strong>Implementation Note:</strong> Yield scores are used strictly for relative ranking of pairs and are not interpreted in absolute magnitude due to scaling sensitivity in the optimization.
+<strong>Interpretation:</strong> With transaction costs at only 5% of the natural spread fluctuation, the HJB optimizer mathematically proves that entering on very small deviations (0.15 $\sigma_{OU}$) is optimal given the extreme mean-reversion speed. Yield scores generated from this output are used strictly for relative portfolio ranking, not as absolute return forecasts.
 </div>
 """, unsafe_allow_html=True)
 
