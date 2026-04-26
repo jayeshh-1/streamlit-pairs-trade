@@ -549,17 +549,6 @@ Holding a position ties up capital. It carries **Horizon Risk** (the uncertainty
 To solve this, the pipeline models the spread as a continuous Ornstein-Uhlenbeck (OU) process and applies the **Zeng & Lee (2014) Stochastic Control framework**. 
 """)
 
-st.markdown("""
-<div class="math-box">
-<strong>Equation 1: Continuous Ornstein-Uhlenbeck (OU) Process</strong>
-</div>
-""", unsafe_allow_html=True)
-st.latex(r"dX_t = \theta (\mu - X_t)dt + \sigma dW_t")
-
-st.markdown(r"""
-Instead of guessing entry bands, the model solves a Hamilton-Jacobi-Bellman (HJB) optimal stopping problem[cite: 2173]. It mathematically derives the exact optimal entry and exit thresholds by maximizing the expected profit *per unit of time*[cite: 2175, 2178], embedding a strict **15 basis point transaction cost** directly into the objective function[cite: 2031, 2188].
-""")
-
 
 st.markdown("""
 <div class="math-box">
@@ -606,8 +595,8 @@ st.markdown("""
 <strong>Empirical OU Fit (AEE vs CMS):</strong><br>
 • <strong>Spread Half-Life (Horizon Risk):</strong> 6.18 Trading Days<br>
 • <strong>Mean Reversion Speed (θ):</strong> 28.2635 (Exceptionally fast)<br>
-• <strong>Dimensionless Cost Barrier ($c_{dim}$):</strong> 0.0502 (Highly tradable)<br>
-• <strong>Optimal Entry Solution:</strong> ±0.15 $\sigma_{OU}$ (Incorporating 15 bps execution cost)
+• <strong>Dimensionless Cost Barrier ($$c_{dim}$$):</strong> 0.0502 (Highly tradable)<br>
+• <strong>Optimal Entry Solution:</strong> ±0.15 $$\sigma_{OU}$$ (Incorporating 15 bps execution cost)
 <br><br>
 <strong>Interpretation:</strong> With transaction costs at only 5% of the natural spread fluctuation, the HJB optimizer mathematically proves that entering on very small deviations (0.15 $\sigma_{OU}$) is optimal given the extreme mean-reversion speed. Yield scores generated from this output are used strictly for relative portfolio ranking, not as absolute return forecasts.
 </div>
@@ -652,9 +641,9 @@ st.markdown("<h2 id='4-regime-risk'><span class='section-badge'>Phase 4</span><s
 
 
 st.markdown("""
-Mean-reverting relationships are rarely stable forever. Structural market shifts can permanently alter the equilibrium between two assets—and if a static model keeps trying to trade a broken spread, it will generate persistent losses. 
+Mean-reverting relationships are rarely stable forever. Structural market shifts can permanently alter the equilibrium between two assets. The parameters estimated in Phase 3 assume stationarity, but financial markets undergo qualitative regime changes. A static model estimated across a long historical window averages these distinct states, systematically underestimating risk during crises.
 
-**The Mechanism:** To prevent this, the pipeline uses an out-of-sample Hidden Markov Model (HMM) featuring Skew-T emissions and Time-Varying Transition Probabilities (TVTP). By continuously estimating the current regime state ($s_t$), the model acts as an emergency brake, detecting structural breaks in real-time and halting trading.
+**The Mechanism:** To prevent this, the pipeline uses an out-of-sample Hidden Markov Model (HMM) featuring Skew-T emissions and Time-Varying Transition Probabilities (TVTP). It infers the unobservable market state $q_t \in \{0, 1\}$ from the spread differences, acting as a dynamic risk overlay. The model explicitly separates a 'Safe' regime (Regime 0) from a 'Crisis' regime (Regime 1), which exhibited a massive $2.18\times$ volatility expansion in empirical testing.
 
 To absolutely prevent Lookahead Bias, the Expectation-Maximization (EM) algorithm is strictly trained on a rolling 252-day historical window to predict the forward 63-day block. Any model that fails the formal Baele (2005) Regime Classification Measure (RCM) is flagged as unreliable and excluded.
 
@@ -662,7 +651,38 @@ To absolutely prevent Lookahead Bias, the Expectation-Maximization (EM) algorith
 Before feeding the universe into the heavy HMM compute engine, we apply a hard mathematical constraint: **Pairs must possess an OU half-life between 1.0 and 60.0 days.** Pairs reverting too quickly (< 1 day) are likely just microstructure noise, while pairs taking too long (> 60 days) tie up capital and invite unacceptable horizon risk.
 """)
 
+with st.expander("View Formal HMM Architecture: Skew-T & TVTP"):
+    st.markdown(r"""
+    **Skew-T Emissions:**
+    Standard HMMs assume Gaussian emissions, which structurally fail to capture the fat tails and asymmetric crash dependence of financial returns. We replace this with a Skew-T emission density estimated via L-BFGS-B:
+    """)
+    st.latex(r"f(x|\mu,\sigma,\nu,\alpha) = \frac{2}{\sigma} t_\nu \left(\frac{x-\mu}{\sigma}\right) T_\nu \left(\alpha \frac{x-\mu}{\sigma} \sqrt{\frac{\nu+1}{\nu+(x-\mu)^2/\sigma^2}}\right)")
+    st.markdown(r"""
+    The degrees of freedom $\nu$ captures fat tails, while the skewness parameter $\alpha$ captures directional bias. This drastically improves the sharpness of posterior regime probabilities during tail events.
 
+    **Time-Varying Transition Probabilities (TVTP):**
+    Assuming a constant transition matrix is empirically false. We condition the transition probabilities on an exogenous composite volatility measure $z_t$ (blending 21-day and 63-day spread volatility) via logistic regression:
+    """)
+    st.latex(r"P(q_{t+1}=j | q_t=i, z_t) = \frac{1}{1 + \exp(-(b0_{ij} + b1_{ij} \cdot z_t))}")
+    st.markdown(r"""
+    This allows the model to anticipate regime transitions dynamically as volatility rises, rather than merely reacting after the fact.
+    """)
+
+st.markdown(r"""
+### Rolling Out-of-Sample Protocol & Model Reliability
+To absolutely prevent Lookahead Bias, the Expectation-Maximization (EM) algorithm is strictly trained on a rolling 252-day window to predict the forward 63-day block. Using smoothed probabilities on the full sample would severely inflate backtest performance.
+
+We employ a **Warm Start Doctrine**: passing the parameter estimates from the previous window as the initial guess for the next window's EM optimization. This prevents the optimizer from finding a different local maximum (causing regime label switching) and ensures computational feasibility.
+""")
+
+with st.expander("View RCM Mathematics & Reliability Threshold"):
+    st.markdown(r"""
+    The Regime Classification Measure quantifies the sharpness of regime assignments. A model that produces near-uniform posterior probabilities is essentially guessing and cannot be trusted.
+    """)
+    st.latex(r"RCM = 100 \cdot \left[ 1 - \frac{K}{K-1} \cdot \frac{1}{T} \sum_t \sum_k \left(p_{t,k} - \frac{1}{K}\right)^2 \right]")
+    st.markdown(r"""
+    An RCM of 100 indicates complete uncertainty. The threshold $RCM < 20$ is a stringent requirement that posterior probabilities heavily concentrate on a single regime (e.g., $0.85 / 0.15$). If this threshold is breached, a hard kill-switch zeroes all trading weights unconditionally.
+    """)
 
 # Display authentic regime classification and trading band plots from the research notebook
 col_hmm1, col_hmm2 = st.columns(2)
@@ -684,9 +704,11 @@ Based on the empirical transition matrix, the <strong>Expected Duration of the H
 
 
 st.markdown("""
-### Empirical Audit: The Asymmetric Filter
+### Asymmetric Trading Rules & The Falling Knife Killer
 
-We backtested an asymmetric filter designed to automatically block trades the moment a structural break is detected. The goal was simple: protect capital when the historical equilibrium fails.
+The optimal trading strategy is asymmetric across regimes: execute normally in the safe regime, but halt entries in the crisis regime. This is justified by an asymmetric loss function—the cost of trading during a crisis (a false negative) is structurally larger than the cost of missing a trade in a calm period (a false positive).
+
+Beyond the basic regime filter, the pipeline implements a **Structural Trap** audit. A trade is blocked as toxic if the alternate regime mean $\mu_1$ has permanently shifted beyond the entry threshold, and the regime fracture distance $|\mu_0 - \mu_1| / \sigma_0$ exceeds a critical limit.
 """)
 
 col4, col5 = st.columns(2)
@@ -708,7 +730,7 @@ The regime filter actively improved trade quality by stripping out structurally 
 
 st.markdown("""
 ### Fracture Distance Optimization
-To determine the exact mathematical breakpoint of a falling knife, the algorithm executed a **Fracture Distance Sweep** across increasing standard deviations.
+To determine the exact mathematical breakpoint of this structural trap, the algorithm executed a **Fracture Distance Sweep** across increasing standard deviations.
 """)
 
 with st.expander("View Fracture Distance Sweep Data"):
