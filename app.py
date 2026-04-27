@@ -558,37 +558,53 @@ st.markdown("""
 st.latex(r"dX_t = \theta (\mu - X_t)dt + \sigma dW_t")
 
 st.markdown("""
-Instead of guessing entry bands, the model mathematically derives the exact optimal entry and exit thresholds. It does this by maximizing the expected profit against the expected holding time.
+Instead of guessing entry bands, the model mathematically derives the exact optimal entry and exit thresholds by a Hamilton-Jacobi-Bellman (HJB) optimal stopping problem. It does this by maximizing the expected profit against the expected holding time.
 
-More importantly, this approach allows the optimizer to internalize a strict **15 basis point transaction cost**. If the math shows that the expected profit won't cover the execution friction faster than the expected holding time, the trade is automatically rejected.
+More importantly, this approach allows the optimizer to internalize a strict **15 basis point transaction cost**. If the optimization shows that the expected profit cannot overcome the execution friction faster than the expected holding time, the trade is automatically rejected.
 """)
 
 with st.expander("View Formal OU Discretization & MLE Estimation"):
     st.markdown(r"""
     **AR(1) Discretization:**
-    The continuous OU SDE cannot be estimated directly from discrete daily data[cite: 2095]. We discretize it over interval $\Delta t = 1/252$ to obtain an AR(1) process[cite: 2096]:
+    The continuous OU SDE not be estimated directly from discrete daily data. We discretize it over interval $\Delta t = 1/252$ to obtain an AR(1) process:
     """)
     st.latex(r"X_t = \alpha + \beta X_{t-1} + \epsilon_t")
     st.markdown(r"""
-    We run OLS regression to estimate $\alpha$ and $\beta$[cite: 2103]. Under Gaussian errors, OLS on an AR(1) process is mathematically equivalent to Maximum Likelihood Estimation (MLE)[cite: 2116]. 
+    We run OLS regression to estimate $\alpha$ and $\beta$. Under Gaussian errors, OLS on an AR(1) process is mathematically equivalent to Maximum Likelihood Estimation (MLE). 
     
     **Parameter Recovery & Stationarity:**
-    We recover the continuous parameters via $\theta = -\ln(\beta)/\Delta t$ and $\mu = \alpha/(1-\beta)$[cite: 2108, 2109]. Crucially, $\beta$ is strictly clipped to $[10^{-4}, 0.9999]$[cite: 2105]. This enforces mean-reverting stationarity and prevents severe numerical instability (division by zero) for unit root processes[cite: 2114, 2115].
+    We recover the continuous parameters via $\theta = -\ln(\beta)/\Delta t$ and $\mu = \alpha/(1-\beta)$. Crucially, $\beta$ is strictly clipped to $[10^{-4}, 0.9999]$. This enforces mean-reverting stationarity and prevents severe numerical instability (division by zero) for unit root processes.
     """)
 
 with st.expander("View Zeng-Lee HJB Dimensionless Optimization"):
     st.markdown(r"""
     **Dimensionless Transformation:**
-    Raw OU parameters vary across pairs, making direct optimization impossible[cite: 2146]. We transform the spread into dimensionless coordinates: $x_d = (x-\mu)/\sigma_{OU}$, where $\sigma_{OU} = \sigma/\sqrt{2\theta}$ is the stationary standard deviation[cite: 2149]. The dimensionless transaction cost becomes $c_{dim} = c / \sigma_{OU}$[cite: 2152]. 
+    Raw OU parameters vary across pairs, making direct optimization impossible. We transform the spread into dimensionless coordinates: $x_d = (x-\mu)/\sigma_{OU}$, where $\sigma_{OU} = \sigma/\sqrt{2\theta}$ is the stationary standard deviation. The dimensionless transaction cost becomes $c_{dim} = c / \sigma_{OU}$. 
     
-    *Hard Constraint:* If $c_{dim} \ge 1.0$, the round-trip execution cost exceeds the spread's entire natural fluctuation[cite: 2157]. The trade is mathematically impossible and immediately rejected[cite: 2155, 2159].
+    *Hard Constraint:* If $c_{dim} \ge 1.0$, the round-trip execution cost exceeds the spread's entire natural fluctuation. The trade is mathematically impossible and immediately rejected.
     
     **Log-Transformed HJB Objective:**
-    The original objective maximizes Yield $= (a_d - b_d - c_{dim}) / \mathbb{E}[T]$[cite: 2195]. Because the numerator (profit margin) and denominator (expected first-passage time) are often tiny fractions, the exponential surface causes severe vanishing gradients and optimizer crashes (`max_fev`)[cite: 2199, 2200]. 
+    The original objective maximizes Yield $= (a_d - b_d - c_{dim}) / \mathbb{E}[T]$. Because the numerator (profit margin) and denominator (expected first-passage time) are often tiny fractions, the exponential surface causes severe vanishing gradients and optimizer crashes (`max_fev`). 
     
-    We resolve this by minimizing the log-transformed objective, converting the exponential surface to a well-conditioned linear one[cite: 2204, 2206]:
+    We resolve this by minimizing the log-transformed objective, converting the exponential surface to a well-conditioned linear one:
     """)
     st.latex(r"\min \left[ \ln(\mathbb{E}[T]) - \ln(a_d - b_d - c_{dim}) \right]")
+    
+with st.expander("Yield Score Construction & Rule Classification"):
+    st.markdown(r"""
+    **Yield Score:**
+    The yield score is defined as the net profit margin divided by the expected trade length:
+    """)
+    st.latex(r"Yield = \frac{a_d - b_d - c_{dim}}{\mathbb{E}[T]}")
+    st.markdown(r"""
+    This score is used strictly for relative portfolio ranking, prioritizing capital allocation to the highest expected return-per-unit-time opportunities. Absolute magnitudes are highly sensitive to the optimization surface scaling.
+    
+    **Optimal Rule Classification:**
+    Based on the HJB boundary solutions, execution rules are classified into distinct regimes:
+    * **Conventional Optimal Rule:** ($b_d > 0$ and $b_d < a_d$) Exit occurs on the same side as entry, but closer to the mean.
+    * **New Optimal Rule:** ($-a_d < b_d \leq 0$) Transaction costs are low enough relative to spread volatility that it is optimal to hold the position through the mean and exit on the opposite side, capturing momentum overshoot.
+    * **Boundary Exception:** Optimizer reached constraint boundaries, indicating degenerate dynamics.
+    """)
 
 st.markdown("""
 <div class="audit-box">
