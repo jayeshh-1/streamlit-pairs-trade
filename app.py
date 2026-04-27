@@ -724,6 +724,9 @@ st.markdown(r"""
 
 The optimal trading strategy is asymmetric across regimes: execute normally in the safe regime, but halt entries in the crisis regime. This is justified by an asymmetric loss function—the cost of trading during a crisis (a false negative) is structurally larger than the cost of missing a trade in a calm period (a false positive).
 
+**Continuous Monitoring & The 70% Conviction Threshold:**
+The dominant regime is not assigned via a simple coin-flip (50% boundary). Instead, it requires a strict 70% posterior conviction ($\rho = 0.70$) before declaring a crisis. Furthermore, because the empirical transition matrix dictates a ~43% probability of a regime switch occurring *during* an average 6.18-day trade, the filter evaluates the regime at every single time step. This allows the system to mathematically zero-out weights mid-trade if a transition occurs.
+
 Beyond the basic regime filter, the pipeline implements a **Structural Trap** audit. A trade is blocked as toxic if the alternate regime mean $\mu_1$ has permanently shifted beyond the entry threshold, and the regime fracture distance $|\mu_0 - \mu_1| / \sigma_0$ exceeds a critical limit.
 """)
 
